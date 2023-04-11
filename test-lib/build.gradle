@@ -29,17 +29,17 @@ repositories {
 optimizedJar.enabled = false
 
 dependencies {
-    implementation Dependencies.javaeeApi
+    compileOnly Dependencies.javaeeApi
     implementation Dependencies.javaeeScorex
     implementation Dependencies.minimalJson
-    compileOnly("foundation.icon:javaee-annotation-processor:0.9.0")
-    compileOnly("com.squareup:javapoet:1.12.1")
+    implementation Dependencies.javaeeTokens
 
-    compileOnly Dependencies.javaeeScoreClient
-    annotationProcessor Dependencies.javaeeScoreClient
-
-    implementation Dependencies.jacksonDatabind
-    implementation Dependencies.iconSdk
+    implementation Dependencies.javaeeUnitTest
+    implementation Dependencies.javaeeTokens
+    implementation Dependencies.mockitoCore
+    implementation Dependencies.mockitoInline
+    implementation Dependencies.junitJupiter
+    implementation Dependencies.junitJupiterEngine
 }
 
 test {

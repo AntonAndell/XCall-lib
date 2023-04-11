@@ -25,12 +25,16 @@ repositories {
 
 dependencies {
     compileOnly Dependencies.javaeeApi
-    compileOnly Dependencies.javaeeTokens
-
     implementation Dependencies.javaeeScorex
+    implementation Dependencies.minimalJson
+    implementation Dependencies.javaeeTokens
     implementation project(':score-lib')
-    implementation Dependencies.iconSdk
+    implementation project(':SpokeToken')
 
+    compileOnly Dependencies.javaeeScoreClient
+    annotationProcessor Dependencies.javaeeScoreClient
+
+    testImplementation "org.web3j:web3j-unit:4.9.6"
     testImplementation project(':test-lib')
     testImplementation Dependencies.javaeeUnitTest
     testImplementation Dependencies.javaeeTokens
@@ -41,8 +45,12 @@ dependencies {
     testRuntimeOnly Dependencies.junitJupiterEngine
 }
 
+web3j {
+    generatedPackageName = "xcall.sample.hubtoken"
+}
+
 optimizedJar {
-    mainClassName = 'xcall.sample.spoketoken.SpokeTokenBase'
+    mainClassName = 'xcall.sample.hubtoken.HubTokenBase'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
@@ -58,6 +66,7 @@ deployJar {
         berlin {
             uri = 'https://berlin.net.solidwallet.io/api/v3'
             nid = 0x7
+            to = "cx47323a98cc44f146356f50e77422a0106922bf29"
         }
         lisbon {
             uri = 'https://lisbon.net.solidwallet.io/api/v3'
@@ -74,9 +83,11 @@ deployJar {
     }
     keystore = rootProject.hasProperty('keystoreName') ? "$keystoreName" : ''
     password = rootProject.hasProperty('keystorePass') ? "$keystorePass" : ''
+
     parameters {
-        arg("_tokenName", "Spoker")
-        arg("_symbolName", "spk")
+        arg("_nid", "0x7.icon")
+        arg("_tokenName", "HubToken")
+        arg("_symbolName", "HUBT")
         arg("_decimals", "18")
         arg("_initialSupply", "1000000000000000000000000")
     }

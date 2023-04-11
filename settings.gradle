@@ -27,6 +27,13 @@
 rootProject.name = 'xcall-lib'
 
 include 'xcall-lib'
-
+include 'score-lib'
+include 'test-lib'
 include(':SpokeToken')
 project(':SpokeToken').projectDir = file("example-contracts/SpokeToken")
+
+include(':HubToken')
+project(':HubToken').projectDir = file("example-contracts/HubToken")
+
+// include(':DappProxy')
+// project(':DappProxy').projectDir = file("example-contracts/DappProxy")

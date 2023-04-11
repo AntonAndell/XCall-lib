@@ -18,20 +18,21 @@ package icon.xcall.lib.annotation;
 
 import com.squareup.javapoet.*;
 import foundation.icon.annotation_processor.AbstractProcessor;
-import icon.xcall.lib.util.XCallMessage;
-
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonArray;
 
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Stream;
+
+import score.ByteArrayObjectWriter;
 import score.Context;
+import score.ObjectReader;
 
 public class XCallProcessor extends AbstractProcessor {
     @Override
@@ -53,7 +54,8 @@ public class XCallProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        Map<ClassName, List<Element>> classes = new HashMap<>();
+        Map<String, List<Element>> classMethods = new HashMap<>();
+        Map<String, TypeElement> classes = new HashMap<>();
 
         boolean claimed = false;
         for (TypeElement annotation : annotations) {
@@ -65,17 +67,43 @@ public class XCallProcessor extends AbstractProcessor {
             claimed = true;
             for (Element element : annotationElements) {
                 TypeElement typeElement = (TypeElement) element.getEnclosingElement();
-                ClassName elementClassName = ClassName.get(typeElement);
-                List<Element> methods = classes.getOrDefault(elementClassName, new ArrayList<Element>());
-
+                String elementClassName = ClassName.get(typeElement).toString();
+                List<Element> methods = classMethods.getOrDefault(elementClassName, new ArrayList<Element>());
                 methods.add(element);
-                classes.put(elementClassName, methods);
+                classMethods.put(elementClassName, methods);
+                classes.put(elementClassName, typeElement);
             }
         }
 
-        classes.forEach((className, methodElements) -> {
-            generateProcessorClass(processingEnv.getFiler(), className, methodElements);
-            generateMessageClass(processingEnv.getFiler(), className, methodElements);
+        classes.forEach((className, classType) -> {
+            if (classMethods.get(className).size() == 0) {
+                return;
+            }
+
+            classType.getInterfaces().forEach(type -> {
+                List<Element> superList = classMethods.get(ClassName.get(type).toString());
+                if (superList == null || superList.size() == 0) {
+                    return;
+                }
+                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).toList();
+                classMethods.put(className, concatedList);
+
+            });
+
+            if (!classType.getSuperclass().getKind().equals(TypeKind.NONE)) {
+                List<Element> superList = classMethods.get(ClassName.get(classType.getSuperclass()).toString());
+                if (superList == null || superList.size() == 0) {
+                    return;
+                }
+
+                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).toList();
+                classMethods.put(className, concatedList);
+            }
+        });
+
+        classMethods.forEach((className, methodElements) -> {
+            generateProcessorClass(processingEnv.getFiler(), ClassName.bestGuess(className), methodElements);
+            generateMessageClass(processingEnv.getFiler(), ClassName.bestGuess(className), methodElements);
         });
 
         return claimed;
@@ -119,8 +147,9 @@ public class XCallProcessor extends AbstractProcessor {
             .addParameter(elementClassName, "score")
             .addParameter(ParameterSpec.builder(String.class, "from").build())
             .addParameter(ParameterSpec.builder(byte[].class, "data").build())
-            .addStatement("$T args = $T.parse(new String(data)).asArray()", JsonArray.class, Json.class)
-            .addStatement("String method = args.get(0).asString()")
+            .addStatement("$T reader = $T.newByteArrayObjectReader(\"RLPn\", data)", ObjectReader.class, Context.class)
+            .addStatement("reader.beginList()")
+            .addStatement("String method = reader.readString()")
             .beginControlFlow("switch (method)");
 
         for (Element element : elements) {
@@ -139,7 +168,7 @@ public class XCallProcessor extends AbstractProcessor {
             for (int i = 1; i < parameters.size(); i++) {
                 TypeMirror type = parameters.get(i).asType();
                 String parser = getParseMethod(type.toString());
-                handleMethod.addCode(", $T." + parser + ".apply(args.get(" + i +"))", ArgumentParser.class);
+                handleMethod.addCode(", reader.$L()", parser);
             }
 
             handleMethod.addCode(");\n$<");
@@ -162,25 +191,27 @@ public class XCallProcessor extends AbstractProcessor {
 
         for (Element element : elements) {
             Name methodName = element.getSimpleName();
+            ExecutableElement executableElement = (ExecutableElement) element;
+            List<? extends VariableElement> parameters = executableElement.getParameters();
+
             MethodSpec.Builder createMethod = MethodSpec.methodBuilder(methodName.toString())
                 .addModifiers(Modifier.PUBLIC)
                 .addModifiers(Modifier.STATIC)
-                .returns(XCallMessage.class)
-                .addStatement("$T msg = new $T()", XCallMessage.class, XCallMessage.class)
-                .addStatement("msg.data.add($S)", methodName.toString());
+                .returns(byte[].class)
+                .addStatement("$T writer = $T.newByteArrayObjectWriter(\"RLPn\")", ByteArrayObjectWriter.class, Context.class)
+                .addStatement("writer.beginList($L)", parameters.size())
+                .addStatement("writer.write($S)", methodName.toString());
 
-            ExecutableElement executableElement = (ExecutableElement) element;
-            List<? extends VariableElement> parameters = executableElement.getParameters();
             for (int i = 1; i < parameters.size(); i++) {
                 TypeName type = TypeName.get(parameters.get(i).asType());
                 Name name = parameters.get(i).getSimpleName();
-                String serializer = getSerializeMethod(type.toString());
 
                 createMethod.addParameter(type, name.toString());
-                createMethod.addStatement("msg.data.add($T.$L.apply($L))", ArgumentSerializer.class, serializer, name.toString());
+                createMethod.addStatement("writer.write($L)", name.toString());
             }
 
-            createMethod.addStatement("return msg");
+            createMethod.addStatement("writer.end()");
+            createMethod.addStatement("return writer.toByteArray()");
             builder.addMethod(createMethod.build());
         }
 
@@ -191,27 +222,15 @@ public class XCallProcessor extends AbstractProcessor {
         paramType = paramType.substring(paramType.lastIndexOf(".") + 1);
         switch(paramType) {
             case "String":
-                return "parseString";
-            case "String[]":
-                return "parseStringArray";
+                return "readString";
             case "Address":
-                return "parseAddress";
-            case "Address[]":
-                return "parseAddressArray";
+                return "readAddress";
             case "BigInteger":
-                return "parseBigInteger";
-            case "BigInteger[]":
-                return "parseBigIntegerArray";
+                return "readBigInteger";
             case "Boolean":
-                return "parseBoolean";
-            case "Boolean[]":
-                return "parseBooleanArray";
-            case "Map<String, Object>":
-                return "parseStruct";
-            case "Map<String, Object>[]":
-                return " parseMapArray";
+                return "readBoolean";
             case "byte[]":
-                return "parseBytes";
+                return "readByteArray";
             default:
                 throw new RuntimeException("XCall annotations does not support parameter type " + paramType);
         }

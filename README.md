@@ -1,52 +1,78 @@
-# Balanced Java Contracts
+# XCall annotations
 
-![Gradle](https://img.shields.io/badge/gradle-7.4.2-blue)
-[![build](https://github.com/balancednetwork/balanced-java-contracts/actions/workflows/pr-test.yml/badge.svg?branch=main)](https://github.com/balancednetwork/balanced-java-contracts/actions/workflows/pr-test.yml)
+## XCall methods
+### Usage
+Annotate `@XCall` to a interface or a public method in the score.
+Note all methods annotated with `@XCall` has the have the first parameter `String from` which represents the usual `Context.getCaller()`.
+````java
+public interface ExampleScore {
+    @XCall
+    void methodOne(String from, BigInteger amount, byte[] data);
 
-This repository contains the smart contracts for Balanced in Java. For python contracts check [balanced-contracts](
-https://github.com/balancednetwork/balanced-contracts). 
+    @XCall
+    void methodTwo(String from, String message);
 
-## Setting up Local Environment
+    void handleCallMessage(String _from, byte[] _data);
+}
+````
 
-- Clone this repo with submodules
+When java compiles, the class ExampleScoreXCall will be generated.
+Then in your `handleCallMessage` you can use this class to parse the messages.
 
-```shell
-  $ git clone --recursive git@github.com:balancednetwork/balanced-java-contracts.git
-```
+````java
+import score.Address;
+import score.annotation.External;
 
-- Clone only submodules if you have already cloned the repo
+import java.math.BigInteger;
 
-```shell
-$ git submodule update --init
-```
+public class ExampleScoreImpl implements ExampleScore {
+    void methodOne(String from, BigInteger amount, byte[] data){
+    }
 
-- Run unit tests
+    void methodTwo(String from, String message){
+    }
 
-```shell
-./gradlew clean build optimizedJar
-```
+    @External
+    void handleCallMessage(String _from, byte[] _data) {
+        // Verify caller is XCall contract or other allowed contract.
+        ExampleScoreXCall.process(this, _from, _data);
+    }
+}
+````
 
-## Running integration tests
+## XCall messages
+When annotating methods with XCall a message factory is also generated for testing and creating messages.
+Using the above interface (ExampleScore). The class ExampleScoreMessages is generated under the package icon.xcall.lib.messages.ExampleScoreMessages. This class can then be used in both unit and integration tests to generate correct byte messages.
 
-- Install [docker](https://docs.docker.com/engine/install/) and [docker-compose](https://docs.docker.com/compose/install/)
-- Start local blockchain
-```shell
-$ docker-compose up -d
-```
-- Run integration test
-```shell
-$ ./gradlew integrationTest
-```
+ExampleScoreImplTest class in src/test/java/...
+````java
+import com.iconloop.score.test.Account;
+import com.iconloop.score.test.Score;
+import com.iconloop.score.test.ServiceManager;
+import com.iconloop.score.test.TestBase;
 
-## Local Deployment
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-After installing docker and docker-compose, start the local blockchain.
+import icon.xcall.lib.messages.ExampleScoreMessages;
 
-- Run deployment task
-```shell
-$ ./gradlew deployToLocal
-```
+public class ExampleScoreImplTest extends TestBase {
+    private static final ServiceManager sm = getServiceManager();
+    private static final Account owner = sm.createAccount();
+    private static final Account xCallScore = Account.newScoreAccount(1);
 
-## Discussion
+    private static Score score;
 
-Visit us on [Discord](https://discord.gg/5EzEtP4XQE) to discuss.
+    @BeforeEach
+    public void setup() throws Exception {
+        score = sm.deploy(owner, ExampleScoreImpl.class);
+    }
+
+    @Test
+    public void testMethodTwo() {
+        String from = "<BTPAddress>";
+        byte[] msg = ExampleScoreMessages.methodTwo("example message");
+        score.invoke(xCallScore, "handleCallMessage", from, msg);
+    }
+}
+````
