@@ -34,7 +34,7 @@ dependencies {
     compileOnly Dependencies.javaeeScoreClient
     annotationProcessor Dependencies.javaeeScoreClient
 
-    testImplementation "org.web3j:web3j-unit:4.9.6"
+    // testImplementation "org.web3j:web3j-unit:4.9.6"
     testImplementation project(':test-lib')
     testImplementation Dependencies.javaeeUnitTest
     testImplementation Dependencies.javaeeTokens
@@ -45,9 +45,9 @@ dependencies {
     testRuntimeOnly Dependencies.junitJupiterEngine
 }
 
-web3j {
-    generatedPackageName = "xcall.sample.hubtoken"
-}
+// web3j {
+//     generatedPackageName = "xcall.sample.hubtoken"
+// }
 
 optimizedJar {
     mainClassName = 'xcall.sample.hubtoken.HubTokenBase'
