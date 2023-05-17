@@ -29,6 +29,7 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import score.ByteArrayObjectWriter;
 import score.Context;
@@ -85,7 +86,7 @@ public class XCallProcessor extends AbstractProcessor {
                 if (superList == null || superList.size() == 0) {
                     return;
                 }
-                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).toList();
+                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).collect(Collectors.toList());
                 classMethods.put(className, concatedList);
 
             });
@@ -96,7 +97,7 @@ public class XCallProcessor extends AbstractProcessor {
                     return;
                 }
 
-                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).toList();
+                List<Element> concatedList = Stream.concat(classMethods.get(className).stream(), superList.stream()).collect(Collectors.toList());
                 classMethods.put(className, concatedList);
             }
         });
