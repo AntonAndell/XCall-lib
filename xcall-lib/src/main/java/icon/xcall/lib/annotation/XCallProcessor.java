@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import score.ByteArrayObjectWriter;
 import score.Context;
 import score.ObjectReader;
+import score.annotation.Optional;
 
 public class XCallProcessor extends AbstractProcessor {
     @Override
@@ -150,7 +151,7 @@ public class XCallProcessor extends AbstractProcessor {
             .addParameter(ParameterSpec.builder(byte[].class, "data").build())
             .addStatement("$T reader = $T.newByteArrayObjectReader(\"RLPn\", data)", ObjectReader.class, Context.class)
             .addStatement("reader.beginList()")
-            .addStatement("String method = reader.readString()")
+            .addStatement("String method = reader.readString().toLowerCase()")
             .beginControlFlow("switch (method)");
 
         for (Element element : elements) {
@@ -163,13 +164,16 @@ public class XCallProcessor extends AbstractProcessor {
                 throw new RuntimeException("First parameter in a XCall must be the from parameter, (String from)");
             }
 
-            handleMethod.addCode("case $S: \n", methodName);
+            handleMethod.addCode("case $S: \n", methodName.toString().toLowerCase());
             handleMethod.addCode("$> score." + methodName + "(from");
 
             for (int i = 1; i < parameters.size(); i++) {
+                String nullable = "";
+                if (parameters.get(i).getAnnotation(Optional.class) != null) {
+                    nullable = "Nullable";
+                }
                 TypeMirror type = parameters.get(i).asType();
-                String parser = getParseMethod(type.toString());
-                handleMethod.addCode(", reader.$L()", parser);
+                handleMethod.addCode(", reader.read$L($T.class)", nullable, type);
             }
 
             handleMethod.addCode(");\n$<");
@@ -178,7 +182,7 @@ public class XCallProcessor extends AbstractProcessor {
         }
 
         handleMethod.addCode("default: \n");
-        handleMethod.addStatement("$>$T.revert()$<", Context.class);
+        handleMethod.addStatement("$>$T.revert($S)$<", Context.class, "Method does not exist");
         handleMethod.endControlFlow();
         builder.addMethod(handleMethod.build());
 
@@ -217,24 +221,6 @@ public class XCallProcessor extends AbstractProcessor {
         }
 
         return builder.build();
-    }
-
-    private String getParseMethod(String paramType) {
-        paramType = paramType.substring(paramType.lastIndexOf(".") + 1);
-        switch(paramType) {
-            case "String":
-                return "readString";
-            case "Address":
-                return "readAddress";
-            case "BigInteger":
-                return "readBigInteger";
-            case "Boolean":
-                return "readBoolean";
-            case "byte[]":
-                return "readByteArray";
-            default:
-                throw new RuntimeException("XCall annotations does not support parameter type " + paramType);
-        }
     }
 
     private String getSerializeMethod(String paramType) {
