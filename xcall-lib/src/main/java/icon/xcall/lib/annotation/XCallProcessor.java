@@ -126,8 +126,7 @@ public class XCallProcessor extends AbstractProcessor {
     }
 
     private void generateMessageClass(Filer filer, ClassName elementClassName, List<? extends Element> elements) {
-        String messagesPackage  = this.getClass().getPackageName().replaceFirst("annotation", "messages");
-        ClassName className = ClassName.get(messagesPackage, elementClassName.simpleName() + "Messages");
+        ClassName className = ClassName.get(elementClassName.packageName(), elementClassName.simpleName() + "Messages");
 
         TypeSpec typeSpec = messagesTypeSpec(className, elements);
         JavaFile javaFile = JavaFile.builder(className.packageName(), typeSpec).build();
@@ -221,31 +220,5 @@ public class XCallProcessor extends AbstractProcessor {
         }
 
         return builder.build();
-    }
-
-    private String getSerializeMethod(String paramType) {
-        paramType = paramType.substring(paramType.lastIndexOf(".") + 1);
-        switch(paramType) {
-            case "String":
-                return "serializeString";
-            case "String[]":
-                return "serializeStringArray";
-            case "Address":
-                return "serializeAddress";
-            case "Address[]":
-                return "serializeAddressArray";
-            case "BigInteger":
-                return "serializeBigInteger";
-            case "BigInteger[]":
-                return "serializeBigIntegerArray";
-            case "Boolean":
-                return "serializeBoolean";
-            case "Boolean[]":
-                return "serializeBooleanArray";
-            case "byte[]":
-                return "serializeBytes";
-            default:
-                throw new RuntimeException("XCall annotations does not support parameter type " + paramType);
-        }
     }
 }
